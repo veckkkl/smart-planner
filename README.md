@@ -1,1 +1,2 @@
-# Smart Planner iOS
+# Smart Planner
+
