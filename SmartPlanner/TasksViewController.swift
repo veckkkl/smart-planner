@@ -16,8 +16,50 @@ protocol CreateTaskViewControllerDelegate: AnyObject {
 
 final class TasksViewController: UIViewController {
 
+    private enum SortOption {
+        case none
+        case dateNewest
+        case dateOldest
+        case priorityHighFirst
+        case priorityLowFirst
+    }
+
     private let tableView = UITableView()
     private var tasks: [Task] = []
+    private var sortOption: SortOption = .none
+
+    private var displayedTasks: [Task] {
+        var result = tasks
+
+        switch sortOption {
+        case .none:
+            return result
+
+        case .dateNewest:
+            result.sort { lhs, rhs in
+                lhs.createdAt > rhs.createdAt
+            }
+            return result
+
+        case .dateOldest:
+            result.sort { lhs, rhs in
+                lhs.createdAt < rhs.createdAt
+            }
+            return result
+
+        case .priorityHighFirst:
+            result.sort { lhs, rhs in
+                lhs.priority.rawValue > rhs.priority.rawValue
+            }
+            return result
+
+        case .priorityLowFirst:
+            result.sort { lhs, rhs in
+                lhs.priority.rawValue < rhs.priority.rawValue
+            }
+            return result
+        }
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -35,13 +77,56 @@ final class TasksViewController: UIViewController {
             target: self,
             action: #selector(addTaskTapped)
         )
-        navigationItem.rightBarButtonItem = addButton
+
+        let sortMenu = makeSortMenu()
+        let sortButton = UIBarButtonItem(
+            image: UIImage(systemName: "arrow.up.arrow.down"),
+            primaryAction: nil,
+            menu: sortMenu
+        )
+        navigationItem.rightBarButtonItems = [addButton, sortButton]
+    }
+
+    private func makeSortMenu() -> UIMenu {
+        let newest = UIAction(
+            title: "Сначала новые"
+        ) { [weak self] _ in
+            self?.sortOption = .dateNewest
+            self?.tableView.reloadData()
+        }
+
+        let oldest = UIAction(
+            title: "Сначала старые"
+        ) { [weak self] _ in
+            self?.sortOption = .dateOldest
+            self?.tableView.reloadData()
+        }
+
+        let highFirst = UIAction(
+            title: "Сначала сложные"
+        ) { [weak self] _ in
+            self?.sortOption = .priorityHighFirst
+            self?.tableView.reloadData()
+        }
+
+        let lowFirst = UIAction(
+            title: "Сначала лёгкие"
+        ) { [weak self] _ in
+            self?.sortOption = .priorityLowFirst
+            self?.tableView.reloadData()
+        }
+
+        let menu = UIMenu(
+            children: [newest, oldest, highFirst, lowFirst]
+        )
+        return menu
     }
 
     private func setupTableView() {
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.dataSource = self
         tableView.delegate = self
+        tableView.register(TaskCell.self, forCellReuseIdentifier: TaskCell.reuseIdentifier)
 
         view.addSubview(tableView)
 
@@ -55,9 +140,7 @@ final class TasksViewController: UIViewController {
 
     private func updateEmptyState() {
         if tasks.isEmpty {
-
             let backgroundView = UIView(frame: tableView.bounds)
-            backgroundView.translatesAutoresizingMaskIntoConstraints = false
 
             let label = UILabel()
             label.text = "Задач нет"
@@ -67,13 +150,11 @@ final class TasksViewController: UIViewController {
             backgroundView.addSubview(label)
 
             NSLayoutConstraint.activate([
-                label.topAnchor.constraint(equalTo: backgroundView.topAnchor, constant: 16),
-                label.leadingAnchor.constraint(equalTo: backgroundView.leadingAnchor, constant: 16),
-                label.trailingAnchor.constraint(lessThanOrEqualTo: backgroundView.trailingAnchor, constant: -16)
+                label.centerXAnchor.constraint(equalTo: backgroundView.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: backgroundView.safeAreaLayoutGuide.centerYAnchor)
             ])
 
             tableView.backgroundView = backgroundView
-
         } else {
             tableView.backgroundView = nil
         }
@@ -85,6 +166,12 @@ final class TasksViewController: UIViewController {
         createVC.delegate = self
         navigationController?.pushViewController(createVC, animated: true)
     }
+
+    private func toggleCompleted(for task: Task) {
+        guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        tasks[index].isCompleted.toggle()
+        tableView.reloadData()
+    }
 }
 
 extension TasksViewController: UITableViewDataSource {
@@ -93,25 +180,30 @@ extension TasksViewController: UITableViewDataSource {
         _ tableView: UITableView,
         numberOfRowsInSection section: Int
     ) -> Int {
-        tasks.count
+        displayedTasks.count
     }
 
     func tableView(
         _ tableView: UITableView,
         cellForRowAt indexPath: IndexPath
     ) -> UITableViewCell {
-        let identifier = "TaskCell"
+        guard let cell = tableView.dequeueReusableCell(
+            withIdentifier: TaskCell.reuseIdentifier,
+            for: indexPath
+        ) as? TaskCell else {
+            return UITableViewCell()
+        }
 
-        let cell = tableView.dequeueReusableCell(withIdentifier: identifier)
-            ?? UITableViewCell(style: .default, reuseIdentifier: identifier)
-
-        let task = tasks[indexPath.row]
-        cell.textLabel?.text = task.title
+        let task = displayedTasks[indexPath.row]
+        cell.configure(with: task)
+        cell.onToggleCompleted = { [weak self] in
+            self?.toggleCompleted(for: task)
+            self?.updateEmptyState()
+        }
 
         return cell
     }
 }
-
 extension TasksViewController: UITableViewDelegate { }
 
 extension TasksViewController: CreateTaskViewControllerDelegate {
