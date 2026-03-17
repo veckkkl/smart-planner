@@ -88,10 +88,10 @@
 		3A06913F2EDCCA0100D85EB2 = {
 			isa = PBXGroup;
 			children = (
-				3A06914A2EDCCA0100D85EB2 /* SmartPlanner */,
 				3A0691612EDCCA0300D85EB2 /* SmartPlannerTests */,
 				3A06916B2EDCCA0300D85EB2 /* SmartPlannerUITests */,
 				3A0691492EDCCA0100D85EB2 /* Products */,
+				3A06914A2EDCCA0100D85EB2 /* SmartPlanner */,
 			);
 			sourceTree = "<group>";
 		};
