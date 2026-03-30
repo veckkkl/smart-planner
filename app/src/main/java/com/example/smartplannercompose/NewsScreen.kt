@@ -1,6 +1,5 @@
 package com.example.smartplannercompose
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,10 +37,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,6 +54,7 @@ fun NewsScreen(
     viewModel: NewsViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val imageLoader = rememberImageLoader()
 
     when (val uiState = state) {
         is NewsUiState.Loading -> {
@@ -99,7 +94,10 @@ fun NewsScreen(
                     items = uiState.articles,
                     key = { it.id }
                 ) { article ->
-                    NewsCard(article = article)
+                    NewsCard(
+                        article = article,
+                        imageLoader = imageLoader
+                    )
                 }
             }
         }
@@ -136,13 +134,17 @@ private fun NewsMessageState(
 }
 
 @Composable
-private fun NewsCard(article: NewsArticle) {
+private fun NewsCard(
+    article: NewsArticle,
+    imageLoader: ImageLoader
+) {
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             NewsImage(
                 imageUrl = article.imageUrl,
+                imageLoader = imageLoader,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(190.dp)
@@ -189,11 +191,13 @@ private fun NewsCard(article: NewsArticle) {
 @Composable
 private fun NewsImage(
     imageUrl: String?,
+    imageLoader: ImageLoader,
     modifier: Modifier = Modifier
 ) {
     val imageState by produceState<NewsImageState>(
         initialValue = NewsImageState.Loading,
-        key1 = imageUrl
+        key1 = imageUrl,
+        key2 = imageLoader
     ) {
         if (imageUrl.isNullOrBlank()) {
             value = NewsImageState.NoImage
@@ -202,33 +206,11 @@ private fun NewsImage(
 
         value = NewsImageState.Loading
 
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val connection = (URL(imageUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15_000
-                    readTimeout = 15_000
-                }
-
-                try {
-                    connection.connect()
-                    if (connection.responseCode !in 200..299) {
-                        return@runCatching null
-                    }
-
-                    connection.inputStream.use { stream ->
-                        BitmapFactory.decodeStream(stream)
-                    }
-                } finally {
-                    connection.disconnect()
-                }
-            }.fold(
-                onSuccess = { bitmap ->
-                    if (bitmap == null) NewsImageState.Error else NewsImageState.Success(bitmap)
-                },
-                onFailure = {
-                    NewsImageState.Error
-                }
-            )
+        val bitmap = imageLoader.loadImage(imageUrl)
+        value = if (bitmap == null) {
+            NewsImageState.Error
+        } else {
+            NewsImageState.Success(bitmap)
         }
     }
 

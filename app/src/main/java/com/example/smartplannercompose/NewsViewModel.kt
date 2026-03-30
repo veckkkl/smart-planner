@@ -1,6 +1,7 @@
 package com.example.smartplannercompose
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -9,11 +10,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class NewsViewModel(
-    private val repository: NewsRepository = NewsRepository()
-) : ViewModel() {
+    application: Application
+) : AndroidViewModel(application) {
+
+    private val repository = NewsRepository(context = application.applicationContext)
 
     private val _uiState = MutableStateFlow<NewsUiState>(NewsUiState.Loading)
     val uiState: StateFlow<NewsUiState> = _uiState.asStateFlow()
@@ -22,27 +24,31 @@ class NewsViewModel(
     private var hasStartedAutoRefresh = false
 
     init {
-        loadNews(showLoading = true)
+        loadNews(showLoadingWhenNoCache = true)
         viewModelScope.launch(Dispatchers.IO) {
             repository.sendAnalyticsEvent(appVersion = "1.0")
         }
     }
 
     fun retry() {
-        loadNews(showLoading = true)
+        loadNews(showLoadingWhenNoCache = true)
     }
 
-    private fun loadNews(showLoading: Boolean) {
-        if (showLoading) {
-            _uiState.value = NewsUiState.Loading
-        }
-
+    private fun loadNews(showLoadingWhenNoCache: Boolean) {
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                repository.fetchTopStories()
+            val cachedNews = repository.getCachedNews()
+            val hasCachedNews = !cachedNews.isNullOrEmpty()
+
+            if (hasCachedNews) {
+                _uiState.value = NewsUiState.Loaded(cachedNews)
+                startAutoRefreshIfNeeded()
+            } else if (showLoadingWhenNoCache) {
+                _uiState.value = NewsUiState.Loading
             }
 
-            result
+            runCatching {
+                repository.fetchNews()
+            }
                 .onSuccess { list ->
                     if (list.isEmpty()) {
                         _uiState.value = NewsUiState.Empty
@@ -52,9 +58,11 @@ class NewsViewModel(
                     }
                 }
                 .onFailure { error ->
-                    _uiState.value = NewsUiState.Error(
-                        error.localizedMessage ?: "Не удалось загрузить новости"
-                    )
+                    if (!hasCachedNews) {
+                        _uiState.value = NewsUiState.Error(
+                            error.localizedMessage ?: "Не удалось загрузить новости"
+                        )
+                    }
                 }
         }
     }
@@ -65,8 +73,8 @@ class NewsViewModel(
         hasStartedAutoRefresh = true
         refreshJob = viewModelScope.launch {
             while (true) {
-                delay(120_000)
-                loadNews(showLoading = false)
+                delay(NewsCacheService.SOFT_TTL_MS)
+                loadNews(showLoadingWhenNoCache = false)
             }
         }
     }

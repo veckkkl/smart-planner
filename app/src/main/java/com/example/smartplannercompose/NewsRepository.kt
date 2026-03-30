@@ -1,5 +1,8 @@
 package com.example.smartplannercompose
 
+import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -7,12 +10,18 @@ import java.util.Locale
 private const val DEFAULT_NEWS_API_KEY = "AUqBpLx688EFeAUoksb7lS3rAS28MDUDlAsYfJWQZ6UV2rjP"
 
 class NewsRepository(
+    context: Context,
     private val apiKey: String = DEFAULT_NEWS_API_KEY,
-    private val networkClient: NewsNetworkClient = NewsNetworkClient()
+    private val networkClient: NewsNetworkClient = NewsNetworkClient(),
+    private val newsCacheService: NewsCacheService = NewsCacheService(context)
 ) {
 
-    fun fetchTopStories(): Result<List<NewsArticle>> {
-        return runCatching {
+    suspend fun getCachedNews(): List<NewsArticle>? {
+        return newsCacheService.loadNews()?.articles
+    }
+
+    suspend fun fetchNews(): List<NewsArticle> {
+        return withContext(Dispatchers.IO) {
             val result = networkClient.getTopStories(apiKey)
             if (result.code !in 200..299) {
                 throw IllegalStateException("Ошибка сервера ${result.code}")
@@ -55,7 +64,9 @@ class NewsRepository(
                 }
             }
 
-            mapped.sortedByDescending { it.publishedAtMillis }
+            val sortedNews = mapped.sortedByDescending { it.publishedAtMillis }
+            newsCacheService.saveNews(sortedNews)
+            sortedNews
         }
     }
 
