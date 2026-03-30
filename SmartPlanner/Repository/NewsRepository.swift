@@ -11,21 +11,31 @@ enum NewsRepositoryError: Error {
     case invalidAPIStatus(String)
 }
 
+struct CachedTopStories {
+    let articles: [NewsArticle]
+    let savedAt: Date
+    let isSoftTTLExpired: Bool
+}
+
 protocol NewsRepositoryProtocol {
-    func fetchTopStories(completion: @escaping (Result<[NewsArticle], Error>) -> Void)
+    func getCachedTopStories() -> CachedTopStories?
+    func refreshTopStories(completion: @escaping (Result<[NewsArticle], Error>) -> Void)
     func sendAnalyticsEvent()
 }
 
 final class NewsRepository: NewsRepositoryProtocol {
 
     private let apiClient: APIClientProtocol
+    private let cacheService: NewsCacheServiceProtocol
     private let apiKey: String
 
     init(
         apiClient: APIClientProtocol = APIClient(),
+        cacheService: NewsCacheServiceProtocol = NewsCacheService(),
         apiKey: String = NewsRepository.resolveAPIKey()
     ) {
         self.apiClient = apiClient
+        self.cacheService = cacheService
         self.apiKey = apiKey
     }
 
@@ -39,7 +49,19 @@ final class NewsRepository: NewsRepositoryProtocol {
         return "AUqBpLx688EFeAUoksb7lS3rAS28MDUDlAsYfJWQZ6UV2rjP"
     }
 
-    func fetchTopStories(completion: @escaping (Result<[NewsArticle], Error>) -> Void) {
+    func getCachedTopStories() -> CachedTopStories? {
+        guard let cache = cacheService.loadValidCache() else {
+            return nil
+        }
+
+        return CachedTopStories(
+            articles: cache.articles,
+            savedAt: cache.savedAt,
+            isSoftTTLExpired: cache.isSoftTTLExpired
+        )
+    }
+
+    func refreshTopStories(completion: @escaping (Result<[NewsArticle], Error>) -> Void) {
         let endpoint = NewsAPI.topStories(apiKey: apiKey)
         let decoder = JSONDecoder()
         if let request = try? endpoint.makeURLRequest() {
@@ -55,6 +77,7 @@ final class NewsRepository: NewsRepositoryProtocol {
                     return
                 }
                 let articles = NYTimesMapper.mapArticles(dto)
+                self.cacheService.save(articles: articles)
                 print("[NewsRepository] Loaded \(articles.count) mapped articles from NYTimes")
                 completion(.success(articles))
 
