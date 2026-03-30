@@ -44,17 +44,28 @@ final class NewsViewModel {
     }
 
     func viewDidLoad() {
-        state = .loading
-        loadNews(showLoader: true)
+        if let cached = repository.getCachedTopStories() {
+            let sortedCached = cached.articles.sorted(by: { $0.publishedAt > $1.publishedAt })
+            state = sortedCached.isEmpty ? .empty : .loaded(sortedCached)
+            startAutoRefreshIfNeeded()
+            loadNewsFromNetwork(showLoader: false, preserveShownContentOnFailure: true)
+        } else {
+            state = .loading
+            loadNewsFromNetwork(showLoader: true, preserveShownContentOnFailure: false)
+        }
         repository.sendAnalyticsEvent()
     }
 
     func retry() {
-        loadNews(showLoader: true)
+        let hasContent = hasVisibleContent
+        loadNewsFromNetwork(
+            showLoader: hasContent == false,
+            preserveShownContentOnFailure: hasContent
+        )
     }
 
     func refreshSilently() {
-        loadNews(showLoader: false)
+        loadNewsFromNetwork(showLoader: false, preserveShownContentOnFailure: true)
     }
 
     func stopAutoRefresh() {
@@ -75,7 +86,19 @@ final class NewsViewModel {
         }
     }
 
-    private func loadNews(showLoader: Bool) {
+    private var hasVisibleContent: Bool {
+        switch state {
+        case .loaded, .empty:
+            return true
+        case .idle, .loading, .error:
+            return false
+        }
+    }
+
+    private func loadNewsFromNetwork(
+        showLoader: Bool,
+        preserveShownContentOnFailure: Bool
+    ) {
         guard isLoading == false else { return }
         isLoading = true
 
@@ -83,7 +106,7 @@ final class NewsViewModel {
             state = .loading
         }
 
-        repository.fetchTopStories { [weak self] result in
+        repository.refreshTopStories { [weak self] result in
             guard let self else { return }
             self.isLoading = false
 
@@ -99,8 +122,11 @@ final class NewsViewModel {
 
                 self.startAutoRefreshIfNeeded()
 
-            case .failure:
-                self.state = .error(self.makeErrorMessage(from: result))
+            case .failure(let error):
+                if preserveShownContentOnFailure || self.hasVisibleContent {
+                    return
+                }
+                self.state = .error(self.makeErrorMessage(from: .failure(error)))
             }
         }
     }
