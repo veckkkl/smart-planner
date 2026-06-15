@@ -2,8 +2,6 @@
 //  CreateTaskViewController.swift
 //  SmartPlanner
 //
-//  Created by valentina balde on 11/30/25.
-//
 
 import UIKit
 
@@ -11,153 +9,215 @@ final class CreateTaskViewController: UIViewController {
 
     weak var delegate: CreateTaskViewControllerDelegate?
 
-    private let titleTextField: UITextField = {
-        let textField = UITextField()
-        textField.placeholder = "Название задачи *"
-        textField.layer.borderWidth = 1
-        textField.layer.borderColor = UIColor.systemGray4.cgColor
-        textField.layer.cornerRadius = 8
-        textField.font = .systemFont(ofSize: 15)
-        textField.borderStyle = .roundedRect
-        textField.translatesAutoresizingMaskIntoConstraints = false
-        return textField
+    private enum Strings {
+        static let screenTitle = "Новая задача"
+        static let save = "Сохранить"
+
+        static let titleField = "Название"
+        static let titlePlaceholder = "Например, Подготовить отчёт"
+
+        static let descriptionField = "Описание"
+        static let descriptionPlaceholder = "Добавьте детали или контекст…"
+
+        static let flagTitle = "Флаг"
+        static let flagSubtitle = "Пометить задачу важной"
+        static let dateTitle = "Выбрать дату"
+        static let dateSubtitle = "Установить срок выполнения"
+
+        static let tipTitle = "Совет"
+        static let tipMessage = "Короткие и конкретные названия задач легче выполнять. Добавьте дату, чтобы получать напоминания."
+    }
+
+    private let viewModel: CreateTaskViewModel
+
+    private let scrollView: UIScrollView = {
+        let view = UIScrollView()
+        view.alwaysBounceVertical = true
+        view.keyboardDismissMode = .interactive
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
 
-    private let descriptionTextView: UITextView = {
-        let textView = UITextView()
-        textView.layer.borderWidth = 1
-        textView.layer.borderColor = UIColor.systemGray4.cgColor
-        textView.layer.cornerRadius = 8
-        textView.font = .systemFont(ofSize: 15)
-        textView.translatesAutoresizingMaskIntoConstraints = false
-        return textView
+    private let contentStack: UIStackView = {
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = DesignTokens.Spacing.l
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
     }()
 
+    private lazy var titleField = FormTextFieldView(
+        symbolName: "doc.text",
+        title: Strings.titleField,
+        placeholder: Strings.titlePlaceholder,
+        characterLimit: viewModel.titleCharacterLimit
+    )
 
-    private let prioritySegmentedControl: UISegmentedControl = {
-        let items = ["Низкий", "Средний", "Высокий"]
-        let control = UISegmentedControl(items: items)
-        control.selectedSegmentIndex = TaskPriority.medium.rawValue
-        control.translatesAutoresizingMaskIntoConstraints = false
-        return control
-    }()
+    private lazy var descriptionField = FormTextAreaView(
+        symbolName: "text.alignleft",
+        title: Strings.descriptionField,
+        placeholder: Strings.descriptionPlaceholder,
+        minHeight: DesignTokens.Sizing.descriptionMinHeight - DesignTokens.Spacing.xxl * 2
+    )
 
-    private let flagSwitch: UISwitch = {
-        let flagSwitch = UISwitch()
-        flagSwitch.translatesAutoresizingMaskIntoConstraints = false
-        return flagSwitch
-    }()
+    private let prioritySelector = PrioritySelectorView()
 
-    private let deadlineSwitch: UISwitch = {
-        let deadlineSwitch = UISwitch()
-        deadlineSwitch.translatesAutoresizingMaskIntoConstraints = false
-        return deadlineSwitch
-    }()
+    private let flagRow = SettingsRowView(
+        symbolName: "flag",
+        title: Strings.flagTitle,
+        subtitle: Strings.flagSubtitle
+    )
 
-    private let deadlineDatePicker: UIDatePicker = {
+    private let dateRow = SettingsRowView(
+        symbolName: "calendar",
+        title: Strings.dateTitle,
+        subtitle: Strings.dateSubtitle
+    )
+
+    private let datePicker: UIDatePicker = {
         let picker = UIDatePicker()
         picker.datePickerMode = .dateAndTime
-        picker.preferredDatePickerStyle = .compact
+        picker.preferredDatePickerStyle = .inline
         picker.translatesAutoresizingMaskIntoConstraints = false
-        picker.isHidden = true
         return picker
     }()
 
+    private lazy var datePickerContainer: UIView = {
+        let view = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(datePicker)
+        NSLayoutConstraint.activate([
+            datePicker.topAnchor.constraint(equalTo: view.topAnchor, constant: DesignTokens.Spacing.s),
+            datePicker.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            datePicker.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            datePicker.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        view.isHidden = true
+        return view
+    }()
+
+    private lazy var saveButton = UIBarButtonItem(
+        title: Strings.save,
+        style: .done,
+        target: self,
+        action: #selector(saveTapped)
+    )
+
+    init(viewModel: CreateTaskViewModel = CreateTaskViewModel()) {
+        self.viewModel = viewModel
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-        title = "Новая задача"
+        view.backgroundColor = DesignTokens.Palette.screenBackground
+        title = Strings.screenTitle
+        navigationItem.largeTitleDisplayMode = .always
+        navigationController?.navigationBar.prefersLargeTitles = true
 
         setupNavigationBar()
         setupLayout()
-        setupActions()
+        bindViewModel()
     }
 
     private func setupNavigationBar() {
-        let saveButton = UIBarButtonItem(
-            title: "Сохранить",
-            style: .done,
-            target: self,
-            action: #selector(saveTapped)
-        )
         navigationItem.rightBarButtonItem = saveButton
+        updateSaveButtonState(isValid: viewModel.isValid)
     }
 
     private func setupLayout() {
-        let flagRow = makeRow(title: "Флаг", rightView: flagSwitch)
-        let deadlineRow = makeRow(title: "Выбрать дату", rightView: deadlineSwitch)
+        view.addSubview(scrollView)
+        scrollView.addSubview(contentStack)
 
-        let stack = UIStackView(arrangedSubviews: [
-            titleTextField,
-            descriptionTextView,
-            prioritySegmentedControl,
-            flagRow,
-            deadlineRow
-        ])
-        stack.axis = .vertical
-        stack.spacing = 12
-        stack.translatesAutoresizingMaskIntoConstraints = false
+        let titleCard = CardView()
+        titleCard.addArrangedSubview(titleField)
 
-        view.addSubview(stack)
-        view.addSubview(deadlineDatePicker)
+        let descriptionCard = CardView()
+        descriptionCard.addArrangedSubview(descriptionField)
 
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+        let priorityCard = CardView()
+        priorityCard.addArrangedSubview(prioritySelector)
 
-            descriptionTextView.heightAnchor.constraint(equalToConstant: 80),
+        let settingsCard = CardView()
+        settingsCard.addArrangedSubview(flagRow)
+        settingsCard.addArrangedSubview(SeparatorView())
+        settingsCard.addArrangedSubview(dateRow)
+        settingsCard.addArrangedSubview(datePickerContainer)
 
-            deadlineDatePicker.topAnchor.constraint(equalTo: stack.bottomAnchor, constant: 8),
-            deadlineDatePicker.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16)
-        ])
-    }
+        let tipCard = TipCardView(title: Strings.tipTitle, message: Strings.tipMessage)
 
-    private func makeRow(title: String, rightView: UIView) -> UIView {
-        let label = UILabel()
-        label.text = title
-
-        let stack = UIStackView(arrangedSubviews: [label, rightView])
-        stack.axis = .horizontal
-        stack.alignment = .center
-        stack.distribution = .equalSpacing
-        return stack
-    }
-
-    private func setupActions() {
-        deadlineSwitch.addTarget(self, action: #selector(deadlineSwitchChanged), for: .valueChanged)
-    }
-
-    @objc
-    private func deadlineSwitchChanged() {
-        deadlineDatePicker.isHidden = deadlineSwitch.isOn == false
-    }
-
-    @objc
-    private func saveTapped() {
-        // название – обязательное поле
-        guard let title = titleTextField.text,
-              title.isEmpty == false
-        else {
-            // можно позже добавить alert
-            return
+        [titleCard, descriptionCard, priorityCard, settingsCard, tipCard].forEach {
+            contentStack.addArrangedSubview($0)
         }
 
-        let description = descriptionTextView.text
-        let priorityIndex = prioritySegmentedControl.selectedSegmentIndex
-        let priority = TaskPriority(rawValue: priorityIndex) ?? .medium
-        let isFlagged = flagSwitch.isOn
-        let deadline = deadlineSwitch.isOn ? deadlineDatePicker.date : nil
-
-        let task = Task(
-            title: title,
-            details: description?.isEmpty == true ? nil : description,
-            priority: priority,
-            isFlagged: isFlagged,
-            deadline: deadline
+        let layoutInsets = UIEdgeInsets(
+            top: DesignTokens.Spacing.l,
+            left: DesignTokens.Spacing.l,
+            bottom: DesignTokens.Spacing.xxl,
+            right: DesignTokens.Spacing.l
         )
 
-        delegate?.createTaskViewController(self, didCreateTask: task)
-        navigationController?.popViewController(animated: true)
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: layoutInsets.top),
+            contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: layoutInsets.left),
+            contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -layoutInsets.right),
+            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -layoutInsets.bottom),
+            contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -(layoutInsets.left + layoutInsets.right)),
+
+            titleCard.heightAnchor.constraint(greaterThanOrEqualToConstant: DesignTokens.Sizing.titleCardMinHeight)
+        ])
+    }
+
+    private func bindViewModel() {
+        titleField.onTextChange = { [weak self] in self?.viewModel.updateTitle($0) }
+        descriptionField.onTextChange = { [weak self] in self?.viewModel.updateDetails($0) }
+        prioritySelector.onSelectionChanged = { [weak self] in self?.viewModel.updatePriority($0) }
+        flagRow.onValueChanged = { [weak self] in self?.viewModel.updateFlagged($0) }
+        dateRow.onValueChanged = { [weak self] in self?.handleDateSwitch(isOn: $0) }
+        datePicker.addTarget(self, action: #selector(dateChanged), for: .valueChanged)
+
+        prioritySelector.setSelected(viewModel.priority)
+
+        viewModel.onValidityChanged = { [weak self] isValid in
+            self?.updateSaveButtonState(isValid: isValid)
+        }
+        viewModel.onTaskCreated = { [weak self] task in
+            guard let self else { return }
+            self.delegate?.createTaskViewController(self, didCreateTask: task)
+            self.navigationController?.popViewController(animated: true)
+        }
+        viewModel.onValidationError = { [weak self] in
+            self?.titleField.focus()
+        }
+    }
+
+    private func updateSaveButtonState(isValid: Bool) {
+        saveButton.isEnabled = isValid
+    }
+
+    private func handleDateSwitch(isOn: Bool) {
+        viewModel.updateDeadlineEnabled(isOn)
+        UIView.animate(withDuration: 0.25) {
+            self.datePickerContainer.isHidden = !isOn
+            self.datePickerContainer.alpha = isOn ? 1 : 0
+            self.view.layoutIfNeeded()
+        }
+    }
+
+    @objc private func dateChanged() {
+        viewModel.updateDeadline(datePicker.date)
+    }
+
+    @objc private func saveTapped() {
+        viewModel.save()
     }
 }
+
