@@ -45,6 +45,13 @@ struct TaskValidatorTests {
 private final class TaskRepositorySpy: TaskRepositoryProtocol {
     private(set) var saved: [Task] = []
     func save(_ task: Task) { saved.append(task) }
+    func update(_ task: Task) {
+        if let idx = saved.firstIndex(where: { $0.id == task.id }) { saved[idx] = task }
+    }
+    func delete(id: Task.ID) { saved.removeAll { $0.id == id } }
+    func fetchAll() -> [Task] { saved }
+    func addObserver(_ observer: AnyObject, onChange: @escaping ([Task]) -> Void) { onChange(saved) }
+    func removeObserver(_ observer: AnyObject) {}
 }
 
 struct CreateTaskUseCaseTests {

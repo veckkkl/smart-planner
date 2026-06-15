@@ -2,8 +2,6 @@
 //  TasksViewController.swift
 //  SmartPlanner
 //
-//  Created by valentina balde on 11/30/25.
-//
 
 import UIKit
 
@@ -16,203 +14,234 @@ protocol CreateTaskViewControllerDelegate: AnyObject {
 
 final class TasksViewController: UIViewController {
 
-    private enum SortOption {
-        case none
-        case dateNewest
-        case dateOldest
-        case priorityHighFirst
-        case priorityLowFirst
+    private enum Strings {
+        static let screenTitle = "Задачи"
+        static let delete = "Удалить"
+        static let complete = "Готово"
+        static let uncomplete = "Снять"
     }
 
-    private let tableView = UITableView()
-    private var tasks: [Task] = []
-    private var sortOption: SortOption = .none
+    private enum Section { case main }
 
-    private var displayedTasks: [Task] {
-        var result = tasks
+    private let viewModel: TasksViewModel
+    private let filterControl = TaskFilterControl()
+    private let toolbarView = TaskToolbarView()
+    private let emptyView = EmptyTasksView()
+    private let tableView: UITableView = {
+        let table = UITableView(frame: .zero, style: .insetGrouped)
+        table.translatesAutoresizingMaskIntoConstraints = false
+        table.backgroundColor = .systemGroupedBackground
+        table.separatorInset = UIEdgeInsets(
+            top: 0,
+            left: DesignTokens.Spacing.xxl,
+            bottom: 0,
+            right: 0
+        )
+        table.rowHeight = UITableView.automaticDimension
+        table.estimatedRowHeight = 64
+        return table
+    }()
 
-        switch sortOption {
-        case .none:
-            return result
+    private lazy var dataSource: UITableViewDiffableDataSource<Section, Task.ID> = makeDataSource()
+    private var taskIndex: [Task.ID: Task] = [:]
 
-        case .dateNewest:
-            result.sort { lhs, rhs in
-                lhs.createdAt > rhs.createdAt
-            }
-            return result
-
-        case .dateOldest:
-            result.sort { lhs, rhs in
-                lhs.createdAt < rhs.createdAt
-            }
-            return result
-
-        case .priorityHighFirst:
-            result.sort { lhs, rhs in
-                lhs.priority.rawValue > rhs.priority.rawValue
-            }
-            return result
-
-        case .priorityLowFirst:
-            result.sort { lhs, rhs in
-                lhs.priority.rawValue < rhs.priority.rawValue
-            }
-            return result
-        }
+    init(viewModel: TasksViewModel = TasksViewModel()) {
+        self.viewModel = viewModel
+        super.init(nibName: nil, bundle: nil)
     }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-        title = "Задачи"
+        view.backgroundColor = .systemGroupedBackground
+        title = Strings.screenTitle
+        navigationController?.navigationBar.prefersLargeTitles = true
+        navigationItem.largeTitleDisplayMode = .always
 
-        setupTableView()
         setupNavigationBar()
-        updateEmptyState()
+        setupLayout()
+        bindViewModel()
+        viewModel.start()
     }
 
-    private func setupNavigationBar() {
-        let addButton = UIBarButtonItem(
-            barButtonSystemItem: .add,
-            target: self,
-            action: #selector(addTaskTapped)
-        )
+    deinit { viewModel.stop() }
 
-        let sortMenu = makeSortMenu()
+    private func setupNavigationBar() {
+        let addAction = UIAction(image: UIImage(systemName: "plus")) { [weak self] _ in
+            self?.presentCreateTask()
+        }
+        let addButton = UIBarButtonItem(primaryAction: addAction)
+
         let sortButton = UIBarButtonItem(
             image: UIImage(systemName: "arrow.up.arrow.down"),
-            primaryAction: nil,
-            menu: sortMenu
+            menu: makeSortMenu()
         )
+
         navigationItem.rightBarButtonItems = [addButton, sortButton]
     }
 
     private func makeSortMenu() -> UIMenu {
-        let newest = UIAction(
-            title: "Сначала новые"
-        ) { [weak self] _ in
-            self?.sortOption = .dateNewest
-            self?.tableView.reloadData()
+        let actions = TaskSortOption.allCases.map { option in
+            UIAction(
+                title: option.title,
+                image: UIImage(systemName: option.symbolName),
+                state: option == viewModel.sortOption ? .on : .off
+            ) { [weak self] _ in
+                self?.viewModel.updateSort(option)
+                self?.setupNavigationBar()
+            }
         }
-
-        let oldest = UIAction(
-            title: "Сначала старые"
-        ) { [weak self] _ in
-            self?.sortOption = .dateOldest
-            self?.tableView.reloadData()
-        }
-
-        let highFirst = UIAction(
-            title: "Сначала сложные"
-        ) { [weak self] _ in
-            self?.sortOption = .priorityHighFirst
-            self?.tableView.reloadData()
-        }
-
-        let lowFirst = UIAction(
-            title: "Сначала лёгкие"
-        ) { [weak self] _ in
-            self?.sortOption = .priorityLowFirst
-            self?.tableView.reloadData()
-        }
-
-        let menu = UIMenu(
-            children: [newest, oldest, highFirst, lowFirst]
-        )
-        return menu
+        return UIMenu(title: "Сортировка", children: actions)
     }
 
-    private func setupTableView() {
-        tableView.translatesAutoresizingMaskIntoConstraints = false
-        tableView.dataSource = self
+    private func setupLayout() {
+        view.addSubview(toolbarView)
+        view.addSubview(filterControl)
+        view.addSubview(tableView)
+        view.addSubview(emptyView)
+
+        emptyView.translatesAutoresizingMaskIntoConstraints = false
+        emptyView.isHidden = true
+        emptyView.onCreateTapped = { [weak self] in self?.presentCreateTask() }
+
+        tableView.dataSource = dataSource
         tableView.delegate = self
         tableView.register(TaskCell.self, forCellReuseIdentifier: TaskCell.reuseIdentifier)
 
-        view.addSubview(tableView)
+        filterControl.onSelectionChange = { [weak self] in self?.viewModel.updateFilter($0) }
 
+        let safe = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.topAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            toolbarView.topAnchor.constraint(equalTo: safe.topAnchor),
+            toolbarView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            toolbarView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+            filterControl.topAnchor.constraint(equalTo: toolbarView.bottomAnchor),
+            filterControl.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            filterControl.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+            tableView.topAnchor.constraint(equalTo: filterControl.bottomAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            emptyView.topAnchor.constraint(equalTo: tableView.topAnchor),
+            emptyView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            emptyView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            emptyView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
     }
 
-    private func updateEmptyState() {
-        if tasks.isEmpty {
-            let backgroundView = UIView(frame: tableView.bounds)
-
-            let label = UILabel()
-            label.text = "Задач нет"
-            label.textColor = .secondaryLabel
-            label.translatesAutoresizingMaskIntoConstraints = false
-
-            backgroundView.addSubview(label)
-
-            NSLayoutConstraint.activate([
-                label.centerXAnchor.constraint(equalTo: backgroundView.centerXAnchor),
-                label.centerYAnchor.constraint(equalTo: backgroundView.safeAreaLayoutGuide.centerYAnchor)
-            ])
-
-            tableView.backgroundView = backgroundView
-        } else {
-            tableView.backgroundView = nil
+    private func bindViewModel() {
+        viewModel.onTasksChanged = { [weak self] tasks in
+            self?.applySnapshot(with: tasks)
         }
     }
 
-    @objc
-    private func addTaskTapped() {
+    private func makeDataSource() -> UITableViewDiffableDataSource<Section, Task.ID> {
+        UITableViewDiffableDataSource(tableView: tableView) { [weak self] table, indexPath, id in
+            guard
+                let self,
+                let cell = table.dequeueReusableCell(withIdentifier: TaskCell.reuseIdentifier, for: indexPath) as? TaskCell,
+                let task = self.taskIndex[id]
+            else {
+                return UITableViewCell()
+            }
+            cell.configure(with: task)
+            cell.onToggleCompleted = { [weak self] in
+                self?.viewModel.toggleCompletion(taskID: id)
+            }
+            return cell
+        }
+    }
+
+    private func applySnapshot(with tasks: [Task]) {
+        taskIndex = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+        var snapshot = NSDiffableDataSourceSnapshot<Section, Task.ID>()
+        snapshot.appendSections([.main])
+        snapshot.appendItems(tasks.map(\.id), toSection: .main)
+        dataSource.apply(snapshot, animatingDifferences: view.window != nil)
+        toolbarView.setCount(viewModel.totalCount)
+        emptyView.isHidden = viewModel.totalCount > 0
+        tableView.isHidden = viewModel.totalCount == 0
+    }
+
+    private func presentCreateTask() {
         let createVC = CreateTaskViewController()
         createVC.delegate = self
         navigationController?.pushViewController(createVC, animated: true)
     }
-
-    private func toggleCompleted(for task: Task) {
-        guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
-        tasks[index].isCompleted.toggle()
-        tableView.reloadData()
-    }
 }
 
-extension TasksViewController: UITableViewDataSource {
+extension TasksViewController: UITableViewDelegate {
 
     func tableView(
         _ tableView: UITableView,
-        numberOfRowsInSection section: Int
-    ) -> Int {
-        displayedTasks.count
+        leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+    ) -> UISwipeActionsConfiguration? {
+        guard let task = task(at: indexPath) else { return nil }
+        let title = task.isCompleted ? Strings.uncomplete : Strings.complete
+        let action = UIContextualAction(style: .normal, title: title) { [weak self] _, _, done in
+            self?.viewModel.toggleCompletion(taskID: task.id)
+            done(true)
+        }
+        action.backgroundColor = .systemGreen
+        action.image = UIImage(systemName: task.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+        return UISwipeActionsConfiguration(actions: [action])
     }
 
     func tableView(
         _ tableView: UITableView,
-        cellForRowAt indexPath: IndexPath
-    ) -> UITableViewCell {
-        guard let cell = tableView.dequeueReusableCell(
-            withIdentifier: TaskCell.reuseIdentifier,
-            for: indexPath
-        ) as? TaskCell else {
-            return UITableViewCell()
+        trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+    ) -> UISwipeActionsConfiguration? {
+        guard let task = task(at: indexPath) else { return nil }
+        let delete = UIContextualAction(style: .destructive, title: Strings.delete) { [weak self] _, _, done in
+            self?.viewModel.delete(taskID: task.id)
+            done(true)
         }
+        delete.image = UIImage(systemName: "trash")
+        return UISwipeActionsConfiguration(actions: [delete])
+    }
 
-        let task = displayedTasks[indexPath.row]
-        cell.configure(with: task)
-        cell.onToggleCompleted = { [weak self] in
-            self?.toggleCompleted(for: task)
-            self?.updateEmptyState()
+    func tableView(
+        _ tableView: UITableView,
+        contextMenuConfigurationForRowAt indexPath: IndexPath,
+        point: CGPoint
+    ) -> UIContextMenuConfiguration? {
+        guard let task = task(at: indexPath) else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            let toggleTitle = task.isCompleted ? Strings.uncomplete : Strings.complete
+            let toggle = UIAction(
+                title: toggleTitle,
+                image: UIImage(systemName: task.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+            ) { _ in
+                self?.viewModel.toggleCompletion(taskID: task.id)
+            }
+            let delete = UIAction(
+                title: Strings.delete,
+                image: UIImage(systemName: "trash"),
+                attributes: .destructive
+            ) { _ in
+                self?.viewModel.delete(taskID: task.id)
+            }
+            return UIMenu(children: [toggle, delete])
         }
+    }
 
-        return cell
+    private func task(at indexPath: IndexPath) -> Task? {
+        guard let id = dataSource.itemIdentifier(for: indexPath) else { return nil }
+        return taskIndex[id]
     }
 }
-extension TasksViewController: UITableViewDelegate { }
 
 extension TasksViewController: CreateTaskViewControllerDelegate {
     func createTaskViewController(
         _ viewController: CreateTaskViewController,
         didCreateTask task: Task
     ) {
-        tasks.append(task)
-        tableView.reloadData()
-        updateEmptyState()
+        // CreateTaskUseCase already persisted to repository — repository observer will refresh.
+        // We avoid double-add here.
     }
 }

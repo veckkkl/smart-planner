@@ -20,7 +20,7 @@ enum TaskPriority: Int, CaseIterable {
     }
 }
 
-struct Task {
+struct Task: Hashable, Identifiable {
     let id: UUID
     let createdAt: Date
     var title: String

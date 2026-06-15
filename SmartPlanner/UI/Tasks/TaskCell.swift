@@ -2,8 +2,6 @@
 //  TaskCell.swift
 //  SmartPlanner
 //
-//  Created by valentina balde on 12/7/25.
-//
 
 import UIKit
 
@@ -13,112 +11,196 @@ final class TaskCell: UITableViewCell {
 
     var onToggleCompleted: (() -> Void)?
 
-    private let priorityView = UIView()
-    private let titleLabel = UILabel()
-    private let subtitleLabel = UILabel()
-    private let flagImageView = UIImageView()
-    private let checkButton = UIButton(type: .system)
+    private enum Constants {
+        static let checkPointSize: CGFloat = 24
+        static let metaIconPointSize: CGFloat = 11
+        static let flagPointSize: CGFloat = 14
+        static let verticalPadding: CGFloat = 10
+        static let horizontalSpacing: CGFloat = 12
+        static let metaSpacing: CGFloat = 4
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.setLocalizedDateFormatFromTemplate("ddMMM")
+        return formatter
+    }()
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private let priorityIndicator = TaskPriorityIndicator()
+
+    private let titleLabel: UILabel = {
+        let label = UILabel()
+        label.font = UIFont.preferredFont(forTextStyle: .headline)
+        label.textColor = .label
+        label.adjustsFontForContentSizeCategory = true
+        label.numberOfLines = 2
+        return label
+    }()
+
+    private let detailsLabel: UILabel = {
+        let label = UILabel()
+        label.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        label.textColor = .secondaryLabel
+        label.adjustsFontForContentSizeCategory = true
+        label.numberOfLines = 2
+        return label
+    }()
+
+    private let dateLabel: UILabel = {
+        let label = UILabel()
+        label.font = UIFont.preferredFont(forTextStyle: .footnote)
+        label.textColor = .secondaryLabel
+        label.adjustsFontForContentSizeCategory = true
+        label.numberOfLines = 1
+        return label
+    }()
+
+    private let flagImageView: UIImageView = {
+        let view = UIImageView()
+        view.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: Constants.flagPointSize, weight: .semibold)
+        view.image = UIImage(systemName: "flag.fill")
+        view.tintColor = .systemOrange
+        view.contentMode = .scaleAspectFit
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.setContentHuggingPriority(.required, for: .horizontal)
+        view.isHidden = true
+        return view
+    }()
+
+    private let checkButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.tintColor = .systemBlue
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.accessibilityLabel = "Отметить выполненной"
+        return button
+    }()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         setupViews()
     }
 
-    required init?(coder: NSCoder) {
-        nil
-    }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
 
     private func setupViews() {
-        selectionStyle = .none
+        backgroundColor = .systemBackground
+        accessoryType = .none
 
-        priorityView.translatesAutoresizingMaskIntoConstraints = false
-        priorityView.layer.cornerRadius = 4
+        let metaStack = UIStackView(arrangedSubviews: [dateLabel])
+        metaStack.axis = .horizontal
+        metaStack.spacing = Constants.metaSpacing
+        metaStack.alignment = .center
 
-        titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        let textStack = UIStackView(arrangedSubviews: [titleLabel, detailsLabel, metaStack])
+        textStack.axis = .vertical
+        textStack.spacing = DesignTokens.Spacing.xs
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        subtitleLabel.font = .systemFont(ofSize: 13)
-        subtitleLabel.textColor = .secondaryLabel
-        subtitleLabel.numberOfLines = 2
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        let rowStack = UIStackView(arrangedSubviews: [priorityIndicator, textStack, flagImageView, checkButton])
+        rowStack.axis = .horizontal
+        rowStack.alignment = .center
+        rowStack.spacing = Constants.horizontalSpacing
+        rowStack.translatesAutoresizingMaskIntoConstraints = false
 
-        flagImageView.image = UIImage(systemName: "flag.fill")
-        flagImageView.tintColor = .systemRed
-        flagImageView.translatesAutoresizingMaskIntoConstraints = false
-        flagImageView.isHidden = true
-
-        checkButton.setTitle("○", for: .normal)
-        checkButton.translatesAutoresizingMaskIntoConstraints = false
-        checkButton.addTarget(self, action: #selector(checkTapped), for: .touchUpInside)
-
-        let labelsStack = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
-        labelsStack.axis = .vertical
-        labelsStack.spacing = 4
-        labelsStack.translatesAutoresizingMaskIntoConstraints = false
-
-        contentView.addSubview(priorityView)
-        contentView.addSubview(checkButton)
-        contentView.addSubview(flagImageView)
-        contentView.addSubview(labelsStack)
-
+        contentView.addSubview(rowStack)
         NSLayoutConstraint.activate([
-            priorityView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            priorityView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            priorityView.widthAnchor.constraint(equalToConstant: 8),
-            priorityView.heightAnchor.constraint(equalToConstant: 32),
-
-            checkButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            checkButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-
-            flagImageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            flagImageView.trailingAnchor.constraint(equalTo: checkButton.leadingAnchor, constant: -8),
-            flagImageView.widthAnchor.constraint(equalToConstant: 16),
-            flagImageView.heightAnchor.constraint(equalToConstant: 16),
-
-            labelsStack.leadingAnchor.constraint(equalTo: priorityView.trailingAnchor, constant: 12),
-            labelsStack.trailingAnchor.constraint(lessThanOrEqualTo: flagImageView.leadingAnchor, constant: -8),
-            labelsStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
-            labelsStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8)
+            rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Constants.verticalPadding),
+            rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -Constants.verticalPadding),
+            rowStack.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
+            rowStack.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor)
         ])
 
-        checkButton.setContentHuggingPriority(.required, for: .horizontal)
-        flagImageView.setContentHuggingPriority(.required, for: .horizontal)
-        labelsStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        checkButton.addTarget(self, action: #selector(checkTapped), for: .touchUpInside)
     }
 
     func configure(with task: Task) {
         titleLabel.text = task.title
+        priorityIndicator.apply(priority: task.priority, dimmed: task.isCompleted)
 
-        var parts: [String] = []
-        if let details = task.details, details.isEmpty == false {
-            parts.append(details)
+        if let details = task.details, !details.isEmpty {
+            detailsLabel.text = details
+            detailsLabel.isHidden = false
+        } else {
+            detailsLabel.isHidden = true
         }
-        if let deadline = task.deadline {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "dd.MM HH:mm"
-            parts.append(formatter.string(from: deadline))
-        }
-        subtitleLabel.text = parts.joined(separator: " • ")
 
-        let alpha: CGFloat = task.isCompleted ? 0.4 : 1
-        titleLabel.alpha = alpha
-        subtitleLabel.alpha = alpha
+        configureDate(for: task)
+        configureCheck(for: task)
+        configureCompletion(for: task)
 
-        let color: UIColor
-        switch task.priority {
-        case .low: color = .systemGreen
-        case .medium: color = .systemOrange
-        case .high: color = .systemRed
-        }
-        priorityView.backgroundColor = color
-
-        let checkTitle = task.isCompleted ? "✓" : "○"
-        checkButton.setTitle(checkTitle, for: .normal)
-        flagImageView.isHidden = task.isFlagged == false
+        flagImageView.isHidden = !task.isFlagged
+        accessibilityLabel = accessibilityDescription(for: task)
     }
 
-    @objc
-    private func checkTapped() {
+    private func configureDate(for task: Task) {
+        guard let deadline = task.deadline else {
+            dateLabel.isHidden = true
+            return
+        }
+        dateLabel.isHidden = false
+        let dateString = Self.dateFormatter.string(from: deadline)
+        let timeString = Self.timeFormatter.string(from: deadline)
+        let attributed = NSMutableAttributedString()
+        attributed.append(symbolAttachment("calendar"))
+        attributed.append(NSAttributedString(string: " \(dateString)  "))
+        attributed.append(symbolAttachment("clock"))
+        attributed.append(NSAttributedString(string: " \(timeString)"))
+        dateLabel.attributedText = attributed
+    }
+
+    private func symbolAttachment(_ name: String) -> NSAttributedString {
+        let config = UIImage.SymbolConfiguration(pointSize: Constants.metaIconPointSize, weight: .semibold)
+        guard let image = UIImage(systemName: name, withConfiguration: config) else {
+            return NSAttributedString()
+        }
+        let attachment = NSTextAttachment(image: image.withTintColor(.secondaryLabel, renderingMode: .alwaysTemplate))
+        return NSAttributedString(attachment: attachment)
+    }
+
+    private func configureCheck(for task: Task) {
+        let symbolName = task.isCompleted ? "checkmark.circle.fill" : "circle"
+        let config = UIImage.SymbolConfiguration(pointSize: Constants.checkPointSize, weight: .regular)
+        let image = UIImage(systemName: symbolName, withConfiguration: config)
+        checkButton.setImage(image, for: .normal)
+        checkButton.tintColor = task.isCompleted ? .systemBlue : .tertiaryLabel
+        checkButton.accessibilityValue = task.isCompleted ? "выполнено" : "не выполнено"
+    }
+
+    private func configureCompletion(for task: Task) {
+        let dim: CGFloat = task.isCompleted ? 0.4 : 1
+        titleLabel.alpha = dim
+        detailsLabel.alpha = dim
+        dateLabel.alpha = dim
+        if task.isCompleted {
+            titleLabel.attributedText = NSAttributedString(
+                string: task.title,
+                attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
+            )
+        } else {
+            titleLabel.attributedText = nil
+            titleLabel.text = task.title
+        }
+    }
+
+    private func accessibilityDescription(for task: Task) -> String {
+        var parts: [String] = [task.title, "приоритет \(task.priority.title)"]
+        if task.isCompleted { parts.append("выполнено") }
+        if task.isFlagged { parts.append("с флагом") }
+        return parts.joined(separator: ", ")
+    }
+
+    @objc private func checkTapped() {
         onToggleCompleted?()
     }
 }
