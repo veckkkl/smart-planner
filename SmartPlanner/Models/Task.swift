@@ -6,7 +6,7 @@
 //
 import Foundation
 
-enum TaskPriority: Int, CaseIterable {
+enum TaskPriority: Int, CaseIterable, Codable {
     case low = 0
     case medium = 1
     case high = 2
@@ -20,7 +20,7 @@ enum TaskPriority: Int, CaseIterable {
     }
 }
 
-struct Task: Hashable, Identifiable {
+struct Task: Hashable, Identifiable, Codable {
     let id: UUID
     let createdAt: Date
     var title: String

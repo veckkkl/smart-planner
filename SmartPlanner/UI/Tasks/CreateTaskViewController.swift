@@ -115,7 +115,7 @@ final class CreateTaskViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = DesignTokens.Palette.screenBackground
         title = Strings.screenTitle
-        navigationItem.largeTitleDisplayMode = .always
+        navigationItem.largeTitleDisplayMode = .automatic
         navigationController?.navigationBar.prefersLargeTitles = true
 
         setupNavigationBar()
@@ -147,9 +147,7 @@ final class CreateTaskViewController: UIViewController {
         settingsCard.addArrangedSubview(dateRow)
         settingsCard.addArrangedSubview(datePickerContainer)
 
-        let tipCard = TipCardView(title: Strings.tipTitle, message: Strings.tipMessage)
-
-        [titleCard, descriptionCard, priorityCard, settingsCard, tipCard].forEach {
+        [titleCard, descriptionCard, priorityCard, settingsCard].forEach {
             contentStack.addArrangedSubview($0)
         }
 
@@ -161,7 +159,7 @@ final class CreateTaskViewController: UIViewController {
         )
 
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),

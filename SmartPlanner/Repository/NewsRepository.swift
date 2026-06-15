@@ -46,7 +46,7 @@ final class NewsRepository: NewsRepositoryProtocol {
                 return trimmed
             }
         }
-        return "AUqBpLx688EFeAUoksb7lS3rAS28MDUDlAsYfJWQZ6UV2rjP"
+        return "iSltcw77ekezHoKjNBIwFiHGJTc88mS85A6pp0ENBQo82Wej"
     }
 
     func getCachedTopStories() -> CachedTopStories? {

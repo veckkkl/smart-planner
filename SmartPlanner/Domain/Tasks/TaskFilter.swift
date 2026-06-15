@@ -7,16 +7,36 @@ import Foundation
 
 enum TaskFilter: Int, CaseIterable {
     case all
-    case active
-    case completed
     case today
+    case upcoming
 
     var title: String {
         switch self {
         case .all: return "Все"
-        case .active: return "Активные"
-        case .completed: return "Выполненные"
         case .today: return "Сегодня"
+        case .upcoming: return "Ближайшие"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .all: return "tray"
+        case .today: return "sun.max"
+        case .upcoming: return "calendar"
+        }
+    }
+}
+
+enum TaskListSection: Hashable {
+    case flat
+    case thisWeek
+    case thisMonth
+
+    var title: String {
+        switch self {
+        case .flat: return ""
+        case .thisWeek: return "Эта неделя"
+        case .thisMonth: return "Этот месяц"
         }
     }
 }

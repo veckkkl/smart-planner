@@ -2,8 +2,6 @@
 //  MainTabBarController.swift
 //  SmartPlanner
 //
-//  Created by valentina balde on 11/30/25.
-//
 
 import UIKit
 
@@ -24,13 +22,9 @@ final class MainTabBarController: UITabBarController {
         let tasksVC = TasksViewController()
         tasksVC.title = "Задачи"
 
-        let notesVC = NotesViewController()
-        notesVC.title = "Записи"
-
         let newsNav = UINavigationController(rootViewController: newsVC)
         let homeNav = UINavigationController(rootViewController: homeVC)
         let tasksNav = UINavigationController(rootViewController: tasksVC)
-        let notesNav = UINavigationController(rootViewController: notesVC)
 
         newsNav.tabBarItem = UITabBarItem(
             title: "Новости",
@@ -50,13 +44,7 @@ final class MainTabBarController: UITabBarController {
             selectedImage: UIImage(systemName: "checklist")
         )
 
-        notesNav.tabBarItem = UITabBarItem(
-            title: "Записи",
-            image: UIImage(systemName: "square.and.pencil"),
-            selectedImage: UIImage(systemName: "square.and.pencil")
-        )
-
-        viewControllers = [newsNav, homeNav, tasksNav, notesNav]
+        viewControllers = [newsNav, homeNav, tasksNav]
         selectedIndex = 1
     }
 }

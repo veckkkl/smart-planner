@@ -44,6 +44,8 @@ final class SettingsRowView: UIView {
         let toggle = UISwitch()
         toggle.onTintColor = DesignTokens.Palette.accent
         toggle.translatesAutoresizingMaskIntoConstraints = false
+        toggle.setContentHuggingPriority(.required, for: .horizontal)
+        toggle.setContentCompressionResistancePriority(.required, for: .horizontal)
         return toggle
     }()
 

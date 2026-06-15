@@ -12,7 +12,7 @@ final class TaskCell: UITableViewCell {
     var onToggleCompleted: (() -> Void)?
 
     private enum Constants {
-        static let checkPointSize: CGFloat = 24
+        static let checkPointSize: CGFloat = 22
         static let metaIconPointSize: CGFloat = 11
         static let flagPointSize: CGFloat = 14
         static let verticalPadding: CGFloat = 10
@@ -182,15 +182,11 @@ final class TaskCell: UITableViewCell {
         titleLabel.alpha = dim
         detailsLabel.alpha = dim
         dateLabel.alpha = dim
-        if task.isCompleted {
-            titleLabel.attributedText = NSAttributedString(
-                string: task.title,
-                attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
-            )
-        } else {
-            titleLabel.attributedText = nil
-            titleLabel.text = task.title
-        }
+        let style = task.isCompleted ? NSUnderlineStyle.single.rawValue : 0
+        titleLabel.attributedText = NSAttributedString(
+            string: task.title,
+            attributes: [.strikethroughStyle: style]
+        )
     }
 
     private func accessibilityDescription(for task: Task) -> String {

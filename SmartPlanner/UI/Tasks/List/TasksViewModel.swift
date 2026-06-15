@@ -7,10 +7,11 @@ import Foundation
 
 final class TasksViewModel {
 
-    var onTasksChanged: (([Task]) -> Void)?
+    var onTasksChanged: (([TaskSectionResult]) -> Void)?
 
     private(set) var filter: TaskFilter = .all
     private(set) var sortOption: TaskSortOption = .dateNewest
+    private(set) var collapsedSections: Set<TaskListSection> = []
 
     private let repository: TaskRepositoryProtocol
     private let processor: TaskListProcessing
@@ -34,20 +35,35 @@ final class TasksViewModel {
         repository.removeObserver(self)
     }
 
-    var displayedTasks: [Task] {
+    var sections: [TaskSectionResult] {
         processor.process(allTasks, filter: filter, sort: sortOption)
     }
 
     var totalCount: Int { allTasks.count }
 
+    var hasAnyTasks: Bool { !allTasks.isEmpty }
+
     func updateFilter(_ value: TaskFilter) {
         filter = value
-        onTasksChanged?(displayedTasks)
+        onTasksChanged?(sections)
     }
 
     func updateSort(_ value: TaskSortOption) {
         sortOption = value
-        onTasksChanged?(displayedTasks)
+        onTasksChanged?(sections)
+    }
+
+    func toggleSectionCollapse(_ section: TaskListSection) {
+        if collapsedSections.contains(section) {
+            collapsedSections.remove(section)
+        } else {
+            collapsedSections.insert(section)
+        }
+        onTasksChanged?(sections)
+    }
+
+    func isCollapsed(_ section: TaskListSection) -> Bool {
+        collapsedSections.contains(section)
     }
 
     func add(_ task: Task) {
@@ -66,6 +82,6 @@ final class TasksViewModel {
 
     private func handleRepositoryUpdate(_ tasks: [Task]) {
         allTasks = tasks
-        onTasksChanged?(displayedTasks)
+        onTasksChanged?(sections)
     }
 }

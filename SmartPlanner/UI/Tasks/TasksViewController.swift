@@ -21,29 +21,27 @@ final class TasksViewController: UIViewController {
         static let uncomplete = "Снять"
     }
 
-    private enum Section { case main }
+    private enum Layout {
+        static let sectionInset: CGFloat = 20
+        static let headerVerticalPadding: CGFloat = 8
+    }
 
     private let viewModel: TasksViewModel
-    private let filterControl = TaskFilterControl()
-    private let toolbarView = TaskToolbarView()
+    private let compactFilter = CompactFilterControl()
     private let emptyView = EmptyTasksView()
     private let tableView: UITableView = {
         let table = UITableView(frame: .zero, style: .insetGrouped)
         table.translatesAutoresizingMaskIntoConstraints = false
         table.backgroundColor = .systemGroupedBackground
-        table.separatorInset = UIEdgeInsets(
-            top: 0,
-            left: DesignTokens.Spacing.xxl,
-            bottom: 0,
-            right: 0
-        )
         table.rowHeight = UITableView.automaticDimension
         table.estimatedRowHeight = 64
+        table.sectionHeaderTopPadding = 0
         return table
     }()
 
-    private lazy var dataSource: UITableViewDiffableDataSource<Section, Task.ID> = makeDataSource()
+    private lazy var dataSource: UITableViewDiffableDataSource<TaskListSection, Task.ID> = makeDataSource()
     private var taskIndex: [Task.ID: Task] = [:]
+    private var currentSections: [TaskSectionResult] = []
 
     init(viewModel: TasksViewModel = TasksViewModel()) {
         self.viewModel = viewModel
@@ -58,7 +56,7 @@ final class TasksViewController: UIViewController {
         view.backgroundColor = .systemGroupedBackground
         title = Strings.screenTitle
         navigationController?.navigationBar.prefersLargeTitles = true
-        navigationItem.largeTitleDisplayMode = .always
+        navigationItem.largeTitleDisplayMode = .automatic
 
         setupNavigationBar()
         setupLayout()
@@ -73,12 +71,10 @@ final class TasksViewController: UIViewController {
             self?.presentCreateTask()
         }
         let addButton = UIBarButtonItem(primaryAction: addAction)
-
         let sortButton = UIBarButtonItem(
             image: UIImage(systemName: "arrow.up.arrow.down"),
             menu: makeSortMenu()
         )
-
         navigationItem.rightBarButtonItems = [addButton, sortButton]
     }
 
@@ -97,8 +93,7 @@ final class TasksViewController: UIViewController {
     }
 
     private func setupLayout() {
-        view.addSubview(toolbarView)
-        view.addSubview(filterControl)
+        installCompactFilterAsTableHeader()
         view.addSubview(tableView)
         view.addSubview(emptyView)
 
@@ -109,39 +104,67 @@ final class TasksViewController: UIViewController {
         tableView.dataSource = dataSource
         tableView.delegate = self
         tableView.register(TaskCell.self, forCellReuseIdentifier: TaskCell.reuseIdentifier)
+        tableView.register(
+            TaskSectionHeaderView.self,
+            forHeaderFooterViewReuseIdentifier: TaskSectionHeaderView.reuseIdentifier
+        )
 
-        filterControl.onSelectionChange = { [weak self] in self?.viewModel.updateFilter($0) }
+        compactFilter.onSelectionChange = { [weak self] in self?.viewModel.updateFilter($0) }
 
-        let safe = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            toolbarView.topAnchor.constraint(equalTo: safe.topAnchor),
-            toolbarView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            toolbarView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-
-            filterControl.topAnchor.constraint(equalTo: toolbarView.bottomAnchor),
-            filterControl.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            filterControl.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-
-            tableView.topAnchor.constraint(equalTo: filterControl.bottomAnchor),
+            tableView.topAnchor.constraint(equalTo: view.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            emptyView.topAnchor.constraint(equalTo: tableView.topAnchor),
+            emptyView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             emptyView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             emptyView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             emptyView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
     }
 
-    private func bindViewModel() {
-        viewModel.onTasksChanged = { [weak self] tasks in
-            self?.applySnapshot(with: tasks)
+    private func installCompactFilterAsTableHeader() {
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        compactFilter.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(compactFilter)
+        NSLayoutConstraint.activate([
+            compactFilter.topAnchor.constraint(equalTo: container.topAnchor, constant: Layout.headerVerticalPadding),
+            compactFilter.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -Layout.headerVerticalPadding),
+            compactFilter.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Layout.sectionInset),
+            compactFilter.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -Layout.sectionInset)
+        ])
+        tableView.tableHeaderView = container
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        sizeTableHeaderIfNeeded()
+    }
+
+    private func sizeTableHeaderIfNeeded() {
+        guard let header = tableView.tableHeaderView else { return }
+        let targetSize = CGSize(width: tableView.bounds.width, height: 0)
+        let size = header.systemLayoutSizeFitting(
+            targetSize,
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        if abs(header.frame.height - size.height) > 0.5 {
+            header.frame.size.height = size.height
+            tableView.tableHeaderView = header
         }
     }
 
-    private func makeDataSource() -> UITableViewDiffableDataSource<Section, Task.ID> {
-        UITableViewDiffableDataSource(tableView: tableView) { [weak self] table, indexPath, id in
+    private func bindViewModel() {
+        viewModel.onTasksChanged = { [weak self] sections in
+            self?.applySnapshot(sections: sections)
+        }
+    }
+
+    private func makeDataSource() -> UITableViewDiffableDataSource<TaskListSection, Task.ID> {
+        let source = UITableViewDiffableDataSource<TaskListSection, Task.ID>(tableView: tableView) { [weak self] table, indexPath, id in
             guard
                 let self,
                 let cell = table.dequeueReusableCell(withIdentifier: TaskCell.reuseIdentifier, for: indexPath) as? TaskCell,
@@ -155,17 +178,45 @@ final class TasksViewController: UIViewController {
             }
             return cell
         }
+        return source
     }
 
-    private func applySnapshot(with tasks: [Task]) {
-        taskIndex = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
-        var snapshot = NSDiffableDataSourceSnapshot<Section, Task.ID>()
-        snapshot.appendSections([.main])
-        snapshot.appendItems(tasks.map(\.id), toSection: .main)
-        dataSource.apply(snapshot, animatingDifferences: view.window != nil)
-        toolbarView.setCount(viewModel.totalCount)
-        emptyView.isHidden = viewModel.totalCount > 0
-        tableView.isHidden = viewModel.totalCount == 0
+    private func applySnapshot(sections: [TaskSectionResult]) {
+        currentSections = sections
+        let allTasks = sections.flatMap(\.tasks)
+        taskIndex = Dictionary(uniqueKeysWithValues: allTasks.map { ($0.id, $0) })
+
+        var snapshot = NSDiffableDataSourceSnapshot<TaskListSection, Task.ID>()
+        for result in sections {
+            snapshot.appendSections([result.section])
+            let isCollapsed = result.section != .flat && viewModel.isCollapsed(result.section)
+            if !isCollapsed {
+                snapshot.appendItems(result.tasks.map(\.id), toSection: result.section)
+            }
+        }
+        snapshot.reconfigureItems(snapshot.itemIdentifiers)
+
+        dataSource.apply(snapshot, animatingDifferences: view.window != nil) { [weak self] in
+            self?.refreshVisibleHeaders()
+        }
+
+        let hasAny = viewModel.hasAnyTasks
+        emptyView.isHidden = hasAny
+        tableView.isHidden = !hasAny
+    }
+
+    private func refreshVisibleHeaders() {
+        for index in currentSections.indices {
+            let result = currentSections[index]
+            guard result.section != .flat,
+                  let header = tableView.headerView(forSection: index) as? TaskSectionHeaderView
+            else { continue }
+            header.configure(
+                title: result.section.title,
+                count: result.tasks.count,
+                isCollapsed: viewModel.isCollapsed(result.section)
+            )
+        }
     }
 
     private func presentCreateTask() {
@@ -176,6 +227,32 @@ final class TasksViewController: UIViewController {
 }
 
 extension TasksViewController: UITableViewDelegate {
+
+    func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+        guard let result = currentSections[safe: section], result.section != .flat else { return nil }
+        guard let header = tableView.dequeueReusableHeaderFooterView(
+            withIdentifier: TaskSectionHeaderView.reuseIdentifier
+        ) as? TaskSectionHeaderView else { return nil }
+        let sectionID = result.section
+        header.configure(
+            title: sectionID.title,
+            count: result.tasks.count,
+            isCollapsed: viewModel.isCollapsed(sectionID)
+        )
+        header.onToggle = { [weak self] in
+            self?.viewModel.toggleSectionCollapse(sectionID)
+        }
+        return header
+    }
+
+    func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        guard let result = currentSections[safe: section], result.section != .flat else { return .leastNormalMagnitude }
+        return UITableView.automaticDimension
+    }
+
+    func tableView(_ tableView: UITableView, estimatedHeightForHeaderInSection section: Int) -> CGFloat {
+        44
+    }
 
     func tableView(
         _ tableView: UITableView,
@@ -241,7 +318,12 @@ extension TasksViewController: CreateTaskViewControllerDelegate {
         _ viewController: CreateTaskViewController,
         didCreateTask task: Task
     ) {
-        // CreateTaskUseCase already persisted to repository — repository observer will refresh.
-        // We avoid double-add here.
+        // CreateTaskUseCase persists via repository; observer refreshes list.
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

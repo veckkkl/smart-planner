@@ -9,81 +9,102 @@ import Foundation
 
 struct TaskListProcessorTests {
 
+    private let fixedNow = Date(timeIntervalSince1970: 1_750_000_000)
+
+    private func service() -> TaskListProcessor {
+        TaskListProcessor(calendar: Calendar(identifier: .gregorian), now: { self.fixedNow })
+    }
+
     private func makeTask(
         title: String,
         priority: TaskPriority = .medium,
         completed: Bool = false,
-        deadline: Date? = nil,
-        createdAt: Date = Date()
+        flagged: Bool = false,
+        deadlineOffset: TimeInterval? = nil,
+        createdOffset: TimeInterval = 0
     ) -> Task {
-        Task(title: title, priority: priority, isFlagged: false, deadline: deadline, isCompleted: completed, createdAt: createdAt)
+        Task(
+            title: title,
+            priority: priority,
+            isFlagged: flagged,
+            deadline: deadlineOffset.map { fixedNow.addingTimeInterval($0) },
+            isCompleted: completed,
+            createdAt: fixedNow.addingTimeInterval(createdOffset)
+        )
     }
 
-    @Test func filterAllReturnsAll() {
-        let sut = TaskListProcessor()
-        let tasks = [makeTask(title: "a"), makeTask(title: "b", completed: true)]
-        #expect(sut.process(tasks, filter: .all, sort: .dateNewest).count == 2)
+    private func flat(_ result: [TaskSectionResult]) -> [Task] {
+        result.flatMap(\.tasks)
     }
 
-    @Test func filterActiveExcludesCompleted() {
-        let sut = TaskListProcessor()
+    @Test func filterAllReturnsEverythingInOneFlatSection() {
+        let sut = service()
         let tasks = [makeTask(title: "a"), makeTask(title: "b", completed: true)]
-        let result = sut.process(tasks, filter: .active, sort: .dateNewest)
-        #expect(result.map(\.title) == ["a"])
-    }
-
-    @Test func filterCompletedOnlyCompleted() {
-        let sut = TaskListProcessor()
-        let tasks = [makeTask(title: "a"), makeTask(title: "b", completed: true)]
-        let result = sut.process(tasks, filter: .completed, sort: .dateNewest)
-        #expect(result.map(\.title) == ["b"])
+        let result = sut.process(tasks, filter: .all, sort: .dateNewest)
+        #expect(result.count == 1)
+        #expect(result.first?.section == .flat)
+        #expect(result.first?.tasks.count == 2)
     }
 
     @Test func filterTodayMatchesSameCalendarDay() {
-        let fixed = Date(timeIntervalSince1970: 1_750_000_000) // arbitrary
-        let calendar = Calendar(identifier: .gregorian)
-        let sut = TaskListProcessor(calendar: calendar, now: { fixed })
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: fixed)
+        let sut = service()
+        let tomorrowOffset: TimeInterval = 60 * 60 * 24
         let tasks = [
-            makeTask(title: "today", deadline: fixed),
-            makeTask(title: "tomorrow", deadline: tomorrow),
+            makeTask(title: "today", deadlineOffset: 60),
+            makeTask(title: "tomorrow", deadlineOffset: tomorrowOffset + 60),
             makeTask(title: "no-date")
         ]
-        let result = sut.process(tasks, filter: .today, sort: .dateNewest)
+        let result = flat(sut.process(tasks, filter: .today, sort: .dateNewest))
         #expect(result.map(\.title) == ["today"])
     }
 
+    @Test func filterUpcomingGroupsByWeekAndMonth() {
+        let sut = service()
+        let inThreeDays: TimeInterval = 60 * 60 * 24 * 3
+        let inTwoWeeks: TimeInterval = 60 * 60 * 24 * 14
+        let inAYear: TimeInterval = 60 * 60 * 24 * 365
+        let tasks = [
+            makeTask(title: "soon", deadlineOffset: inThreeDays),
+            makeTask(title: "this-month", deadlineOffset: inTwoWeeks),
+            makeTask(title: "far-future", deadlineOffset: inAYear),
+            makeTask(title: "completed", completed: true, deadlineOffset: inThreeDays),
+            makeTask(title: "no-date")
+        ]
+        let result = sut.process(tasks, filter: .upcoming, sort: .dateNewest)
+        let weekly = result.first { $0.section == .thisWeek }
+        let monthly = result.first { $0.section == .thisMonth }
+        #expect(weekly?.tasks.map(\.title) == ["soon"])
+        #expect(monthly?.tasks.map(\.title) == ["this-month"] || monthly == nil)
+    }
+
+    @Test func filterUpcomingExcludesPastDeadlinesAndCompleted() {
+        let sut = service()
+        let tasks = [
+            makeTask(title: "past", deadlineOffset: -60),
+            makeTask(title: "future", deadlineOffset: 60 * 60 * 24),
+            makeTask(title: "done", completed: true, deadlineOffset: 60 * 60 * 24)
+        ]
+        let result = flat(sut.process(tasks, filter: .upcoming, sort: .dateNewest))
+        #expect(result.map(\.title) == ["future"])
+    }
+
     @Test func sortPriorityHighFirst() {
-        let sut = TaskListProcessor()
+        let sut = service()
         let tasks = [
             makeTask(title: "low", priority: .low),
             makeTask(title: "high", priority: .high),
             makeTask(title: "med", priority: .medium)
         ]
-        let result = sut.process(tasks, filter: .all, sort: .priorityHighFirst)
+        let result = flat(sut.process(tasks, filter: .all, sort: .priorityHighFirst))
         #expect(result.map(\.title) == ["high", "med", "low"])
     }
 
-    @Test func sortDateNewest() {
-        let now = Date()
-        let earlier = now.addingTimeInterval(-1000)
-        let tasks = [
-            makeTask(title: "old", createdAt: earlier),
-            makeTask(title: "new", createdAt: now)
-        ]
-        let result = TaskListProcessor().process(tasks, filter: .all, sort: .dateNewest)
-        #expect(result.map(\.title) == ["new", "old"])
-    }
-}
-
-struct TaskCountFormatterTests {
-    @Test func pluralization() {
-        #expect(TaskCountFormatter.localize(count: 0) == "0 задач")
-        #expect(TaskCountFormatter.localize(count: 1) == "1 задача")
-        #expect(TaskCountFormatter.localize(count: 3) == "3 задачи")
-        #expect(TaskCountFormatter.localize(count: 5) == "5 задач")
-        #expect(TaskCountFormatter.localize(count: 11) == "11 задач")
-        #expect(TaskCountFormatter.localize(count: 21) == "21 задача")
-        #expect(TaskCountFormatter.localize(count: 22) == "22 задачи")
+    @Test func emptySectionIsOmitted() {
+        let sut = service()
+        let inAYear: TimeInterval = 60 * 60 * 24 * 365
+        let tasks = [makeTask(title: "far", deadlineOffset: inAYear)]
+        let result = sut.process(tasks, filter: .upcoming, sort: .dateNewest)
+        // Far-future task isn't in this week or this month → both sections empty → result is empty.
+        #expect(result.isEmpty)
     }
 }

@@ -18,12 +18,25 @@ final class InMemoryTaskRepository: TaskRepositoryProtocol {
 
     static let shared = InMemoryTaskRepository()
 
+    private enum Constants {
+        static let storageKey = "SmartPlanner.tasks.v1"
+    }
+
     private let queue = DispatchQueue(label: "InMemoryTaskRepository.queue")
+    private let defaults: UserDefaults
     private var storage: [Task] = []
     private var observers: [ObjectIdentifier: (AnyObject, ([Task]) -> Void)] = [:]
 
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.storage = Self.load(from: defaults)
+    }
+
     func save(_ task: Task) {
-        queue.sync { storage.append(task) }
+        queue.sync {
+            storage.append(task)
+            persist()
+        }
         notify()
     }
 
@@ -31,17 +44,34 @@ final class InMemoryTaskRepository: TaskRepositoryProtocol {
         queue.sync {
             guard let index = storage.firstIndex(where: { $0.id == task.id }) else { return }
             storage[index] = task
+            persist()
         }
         notify()
     }
 
     func delete(id: Task.ID) {
-        queue.sync { storage.removeAll { $0.id == id } }
+        queue.sync {
+            storage.removeAll { $0.id == id }
+            persist()
+        }
         notify()
     }
 
     func fetchAll() -> [Task] {
         queue.sync { storage }
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(storage) else { return }
+        defaults.set(data, forKey: Constants.storageKey)
+    }
+
+    private static func load(from defaults: UserDefaults) -> [Task] {
+        guard
+            let data = defaults.data(forKey: Constants.storageKey),
+            let tasks = try? JSONDecoder().decode([Task].self, from: data)
+        else { return [] }
+        return tasks
     }
 
     func addObserver(_ observer: AnyObject, onChange: @escaping ([Task]) -> Void) {
