@@ -96,12 +96,16 @@ final class CreateTaskViewController: UIViewController {
         return view
     }()
 
-    private lazy var saveButton = UIBarButtonItem(
-        title: Strings.save,
-        style: .done,
-        target: self,
-        action: #selector(saveTapped)
-    )
+    private lazy var saveButton: UIBarButtonItem = {
+        let button = UIBarButtonItem(
+            title: Strings.save,
+            style: .done,
+            target: self,
+            action: #selector(saveTapped)
+        )
+        button.accessibilityIdentifier = "createTask.saveButton"
+        return button
+    }()
 
     init(viewModel: CreateTaskViewModel = CreateTaskViewModel()) {
         self.viewModel = viewModel
@@ -115,6 +119,9 @@ final class CreateTaskViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = DesignTokens.Palette.screenBackground
         title = Strings.screenTitle
+        titleField.fieldAccessibilityIdentifier = "createTask.titleField"
+        descriptionField.fieldAccessibilityIdentifier = "createTask.descriptionField"
+        flagRow.toggleAccessibilityIdentifier = "createTask.flagSwitch"
         navigationItem.largeTitleDisplayMode = .automatic
         navigationController?.navigationBar.prefersLargeTitles = true
 

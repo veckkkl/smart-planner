@@ -126,6 +126,8 @@ final class TaskCell: UITableViewCell {
 
     func configure(with task: Task) {
         titleLabel.text = task.title
+        titleLabel.accessibilityIdentifier = "taskCell.title.\(task.title)"
+        checkButton.accessibilityIdentifier = "taskCell.completeButton.\(task.title)"
         priorityIndicator.apply(priority: task.priority, dimmed: task.isCompleted)
 
         if let details = task.details, !details.isEmpty {

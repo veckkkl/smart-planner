@@ -14,6 +14,11 @@ final class SettingsRowView: UIView {
         set { toggle.setOn(newValue, animated: false) }
     }
 
+    var toggleAccessibilityIdentifier: String? {
+        get { toggle.accessibilityIdentifier }
+        set { toggle.accessibilityIdentifier = newValue }
+    }
+
     private let iconView: UIImageView = {
         let view = UIImageView()
         view.tintColor = DesignTokens.Palette.accent

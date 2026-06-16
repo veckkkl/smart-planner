@@ -43,6 +43,7 @@ final class MainTabBarController: UITabBarController {
             image: UIImage(systemName: "checklist"),
             selectedImage: UIImage(systemName: "checklist")
         )
+        tasksNav.tabBarItem.accessibilityIdentifier = "tasks.tab"
 
         viewControllers = [newsNav, homeNav, tasksNav]
         selectedIndex = 1

@@ -26,11 +26,15 @@ final class ImageCacheService: ImageCacheServiceProtocol {
     private let maxDiskItemAge: TimeInterval = 7 * 24 * 60 * 60
     private var didScheduleCleanup = false
 
-    init(fileManager: FileManager = .default) {
+    init(fileManager: FileManager = .default, cacheDirectoryURL: URL? = nil) {
         self.fileManager = fileManager
-        let cacheDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? fileManager.temporaryDirectory
-        self.diskDirectoryURL = cacheDirectory.appendingPathComponent("NewsImages", isDirectory: true)
+        if let cacheDirectoryURL {
+            self.diskDirectoryURL = cacheDirectoryURL
+        } else {
+            let cacheDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+                ?? fileManager.temporaryDirectory
+            self.diskDirectoryURL = cacheDirectory.appendingPathComponent("NewsImages", isDirectory: true)
+        }
 
         ioQueue.async { [weak self] in
             self?.prepareDiskDirectoryIfNeeded()

@@ -54,6 +54,11 @@ final class FormTextFieldView: UIView, UITextFieldDelegate {
 
     var text: String { textField.text ?? "" }
 
+    var fieldAccessibilityIdentifier: String? {
+        get { textField.accessibilityIdentifier }
+        set { textField.accessibilityIdentifier = newValue }
+    }
+
     func focus() {
         textField.becomeFirstResponder()
     }

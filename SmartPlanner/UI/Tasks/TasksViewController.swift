@@ -71,6 +71,7 @@ final class TasksViewController: UIViewController {
             self?.presentCreateTask()
         }
         let addButton = UIBarButtonItem(primaryAction: addAction)
+        addButton.accessibilityIdentifier = "tasks.addButton"
         let sortButton = UIBarButtonItem(
             image: UIImage(systemName: "arrow.up.arrow.down"),
             menu: makeSortMenu()

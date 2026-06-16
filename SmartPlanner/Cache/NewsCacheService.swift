@@ -34,10 +34,11 @@ final class NewsCacheService: NewsCacheServiceProtocol {
     private let softTTL: TimeInterval = 2 * 60
     private let hardTTL: TimeInterval = 24 * 60 * 60
 
-    init(fileManager: FileManager = .default) {
+    init(fileManager: FileManager = .default, cacheDirectoryURL: URL? = nil) {
         self.fileManager = fileManager
 
-        let cacheDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let cacheDirectory = cacheDirectoryURL
+            ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
         self.cacheFileURL = cacheDirectory.appendingPathComponent("news_cache.json")
 

@@ -72,6 +72,11 @@ final class FormTextAreaView: UIView, UITextViewDelegate {
 
     var text: String { textView.text ?? "" }
 
+    var fieldAccessibilityIdentifier: String? {
+        get { textView.accessibilityIdentifier }
+        set { textView.accessibilityIdentifier = newValue }
+    }
+
     func textViewDidChange(_ textView: UITextView) {
         placeholderLabel.isHidden = !text.isEmpty
         onTextChange?(text)

@@ -7,16 +7,17 @@ import UIKit
 
 final class DayTasksViewController: UIViewController {
 
-    private let day: Date
-    private let tasks: [Task]
-    private let repository: TaskRepositoryProtocol
+    private let viewModel: DayTasksViewModel
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let emptyView = EmptyTasksView()
 
-    init(day: Date, tasks: [Task], repository: TaskRepositoryProtocol = InMemoryTaskRepository.shared) {
-        self.day = day
-        self.tasks = tasks
-        self.repository = repository
+    init(day: Date, tasks: [Task]) {
+        self.viewModel = DayTasksViewModel(day: day, initialTasks: tasks)
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    init(viewModel: DayTasksViewModel) {
+        self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -26,8 +27,17 @@ final class DayTasksViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemGroupedBackground
-        title = Self.formatter.string(from: day)
+        title = Self.formatter.string(from: viewModel.day)
 
+        setupLayout()
+        bindViewModel()
+        render(viewModel.state)
+        viewModel.start()
+    }
+
+    deinit { viewModel.stop() }
+
+    private func setupLayout() {
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.dataSource = self
         tableView.register(TaskCell.self, forCellReuseIdentifier: TaskCell.reuseIdentifier)
@@ -36,8 +46,6 @@ final class DayTasksViewController: UIViewController {
         tableView.estimatedRowHeight = 64
 
         emptyView.translatesAutoresizingMaskIntoConstraints = false
-        emptyView.isHidden = !tasks.isEmpty
-        tableView.isHidden = tasks.isEmpty
 
         view.addSubview(tableView)
         view.addSubview(emptyView)
@@ -55,6 +63,18 @@ final class DayTasksViewController: UIViewController {
         ])
     }
 
+    private func bindViewModel() {
+        viewModel.onStateChanged = { [weak self] state in
+            self?.render(state)
+        }
+    }
+
+    private func render(_ state: DayTasksState) {
+        emptyView.isHidden = !state.isEmpty
+        tableView.isHidden = state.isEmpty
+        tableView.reloadData()
+    }
+
     private static let formatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale.autoupdatingCurrent
@@ -65,20 +85,18 @@ final class DayTasksViewController: UIViewController {
 
 extension DayTasksViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        tasks.count
+        viewModel.state.tasks.count
     }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        guard let cell = tableView.dequeueReusableCell(withIdentifier: TaskCell.reuseIdentifier, for: indexPath) as? TaskCell else {
+        guard
+            let cell = tableView.dequeueReusableCell(withIdentifier: TaskCell.reuseIdentifier, for: indexPath) as? TaskCell,
+            let task = viewModel.task(at: indexPath.row)
+        else {
             return UITableViewCell()
         }
-        let task = tasks[indexPath.row]
         cell.configure(with: task)
         cell.onToggleCompleted = { [weak self] in
-            guard let self else { return }
-            var updated = task
-            updated.isCompleted.toggle()
-            self.repository.update(updated)
-            tableView.reloadRows(at: [indexPath], with: .automatic)
+            self?.viewModel.toggleCompletion(taskID: task.id)
         }
         return cell
     }

@@ -71,6 +71,7 @@ final class PrioritySelectorView: UIView {
         button.translatesAutoresizingMaskIntoConstraints = false
         button.heightAnchor.constraint(equalToConstant: DesignTokens.Sizing.priorityButtonHeight).isActive = true
         button.accessibilityLabel = "Приоритет \(priority.title)"
+        button.accessibilityIdentifier = "createTask.priority.\(priority.identifierSuffix)"
         button.addAction(UIAction { [weak self] _ in
             self?.selectedPriority = priority
             self?.onSelectionChanged?(priority)
@@ -101,6 +102,14 @@ extension TaskPriority {
         case .low: return .systemGreen
         case .medium: return .systemOrange
         case .high: return .systemRed
+        }
+    }
+
+    var identifierSuffix: String {
+        switch self {
+        case .low: return "low"
+        case .medium: return "medium"
+        case .high: return "high"
         }
     }
 }
