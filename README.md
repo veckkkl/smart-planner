@@ -1,114 +1,153 @@
 # SmartPlanner
 
-SmartPlanner — iOS-приложение для планирования задач, просмотра личной
-статистики и чтения новостей. Интерфейс написан на UIKit без сторонних
-зависимостей.
+SmartPlanner — кроссплатформенное приложение для управления задачами,
+отслеживания прогресса и чтения новостей. В репозитории находятся две
+нативные реализации: iOS на Swift/UIKit и Android на Kotlin/Jetpack Compose.
 
 ## Возможности
 
 - создание задач с описанием, приоритетом, флагом и дедлайном;
-- фильтрация задач по сроку и сортировка по дате или приоритету;
+- фильтрация по сроку и сортировка по дате или приоритету;
 - группировка ближайших задач по неделе и месяцу;
-- отметка выполненных задач и удаление свайпом;
-- дашборд со статистикой, календарём и ближайшими задачами;
+- отметка задач выполненными;
+- удаление задач свайпом в iOS;
+- дашборд со статистикой за неделю, месяц или всё время;
+- календарь с активными, выполненными и просроченными задачами;
 - просмотр задач за выбранный день;
 - лента главных новостей The New York Times;
-- локальный кеш новостей с фоновым обновлением;
+- фоновое обновление и локальное кеширование новостей и изображений;
 - сохранение задач между запусками приложения.
 
-## Стек
+## Платформы и технологии
 
-- Swift 5;
-- UIKit и Auto Layout;
-- MVVM;
-- URLSession и Codable;
-- Diffable Data Source;
-- UserDefaults для хранения задач;
-- файловый кеш для новостей;
-- XCTest и Swift Testing.
+| Платформа | Технологии | Минимальная версия |
+|---|---|---|
+| iOS | Swift 5, UIKit, Auto Layout, MVVM, URLSession, Codable | iOS 17.6 |
+| Android | Kotlin, Jetpack Compose, Material 3, StateFlow, Coroutines | Android 7.0 (API 24) |
 
-Минимальная версия приложения — iOS 17.6.
+Обе версии используют нативный UI и разделение на доменный слой, слой данных
+и представление. Сторонние зависимости iOS не требуются. Android использует
+Gradle и Gson.
 
-## Архитектура
-
-Проект разделён на логические слои:
+## Структура репозитория
 
 ```text
 SmartPlanner/
-├── App/             # запуск приложения и навигация
-├── UI/              # экраны, компоненты и ViewModel
-├── Domain/          # бизнес-правила задач и статистики
-├── Data/            # репозиторий задач
-├── Network/         # HTTP-клиент и endpoints
-├── Repository/      # координация API и кеша новостей
-├── Cache/           # файловый кеш новостей и изображений
-├── Models/          # модели приложения
-├── Services/        # загрузка изображений
-└── DesignSystem/    # цвета, отступы и визуальные токены
+├── Android/         # Android-приложение на Kotlin и Jetpack Compose
+├── iOS/             # iOS-приложение на Swift и UIKit
+└── docs/adr/        # архитектурные решения
 ```
 
-Основное направление зависимостей: `UI → Domain`, `UI → Data`,
-`Data → Domain`. ViewModel получают сервисы и репозитории через протоколы,
-поэтому бизнес-логику можно тестировать без UI и сети.
+### iOS
 
-Принятые архитектурные решения описаны в каталоге
-[`docs/adr`](docs/adr).
+```text
+iOS/
+├── SmartPlanner.xcodeproj
+├── SmartPlannerTests/
+├── SmartPlannerUITests/
+└── SmartPlanner/
+    ├── App/             # запуск и навигация
+    ├── UI/              # экраны, компоненты и ViewModel
+    ├── Domain/          # бизнес-правила задач и статистики
+    ├── Data/            # хранение задач
+    ├── Network/         # HTTP-клиент и API endpoints
+    ├── Repository/      # репозиторий новостей
+    ├── Cache/           # кеш новостей и изображений
+    ├── Models/
+    ├── Services/
+    └── DesignSystem/
+```
 
-## Работа с данными
+### Android
 
-Задачи кодируются через `Codable` и сохраняются в `UserDefaults`.
-Репозиторий уведомляет подписанные ViewModel об изменениях, поэтому главный
-экран и список задач обновляются синхронно.
+```text
+Android/app/src/main/java/com/example/smartplannercompose/
+├── app/             # точка входа, навигация и DI-контейнер
+├── core/            # общие инфраструктурные типы
+├── domain/          # модели и бизнес-правила
+├── data/            # SharedPreferences, сеть и файловый кеш
+├── presentation/    # Compose-экраны и ViewModel
+├── designsystem/    # общие UI-компоненты и токены
+└── ui/theme/        # тема Material 3
+```
 
-Новости загружаются из NYTimes Top Stories API. Файловый кеш имеет два срока:
+## Данные и кеширование
 
-- soft TTL — 2 минуты, после которого данные показываются сразу и обновляются;
-- hard TTL — 24 часа, после которого кеш удаляется.
+Задачи сохраняются локально: iOS использует `UserDefaults`, Android —
+`SharedPreferences`. Изменения передаются экранам через наблюдаемый
+репозиторий.
 
-Изображения загружаются асинхронно и кешируются отдельно.
+Новости загружаются через NYTimes Top Stories API. В обеих версиях
+используется локальный кеш:
 
-## Запуск
+- до 2 минут данные считаются свежими;
+- после 2 минут кеш отображается сразу и обновляется в фоне;
+- через 24 часа устаревший кеш удаляется.
+
+## Настройка API
+
+Получите ключ [NYTimes Top Stories API](https://developer.nytimes.com/docs/top-stories-product/1/overview).
+
+Для iOS добавьте ключ в `iOS/SmartPlanner/Info.plist`:
+
+```xml
+<key>NYT_API_KEY</key>
+<string>YOUR_API_KEY</string>
+```
+
+Для Android создайте `Android/local.properties` и добавьте:
+
+```properties
+NYT_API_KEY=YOUR_API_KEY
+```
+
+Также Android-ключ можно передать через переменную окружения `NYT_API_KEY`.
+Файлы `local.properties` исключены из Git.
+
+## Запуск iOS
 
 Понадобятся Xcode 16.2 или новее и симулятор с iOS 17.6+.
 
-1. Клонируйте репозиторий:
+1. Откройте `iOS/SmartPlanner.xcodeproj`.
+2. Выберите схему `SmartPlanner` и iPhone Simulator.
+3. Запустите приложение сочетанием `⌘R`.
 
-   ```bash
-   git clone git@github.com:veckkkl/smart-planner.git
-   cd smart-planner
-   ```
+## Запуск Android
 
-2. Укажите ключ NYTimes Top Stories API в `SmartPlanner/Info.plist`:
+Понадобятся Android Studio, JDK 17 и Android SDK 36.
 
-   ```xml
-   <key>NYT_API_KEY</key>
-   <string>YOUR_API_KEY</string>
-   ```
+1. Откройте папку `Android` в Android Studio.
+2. Дождитесь завершения Gradle Sync.
+3. Выберите эмулятор или устройство с API 24+.
+4. Запустите конфигурацию `app`.
 
-3. Откройте `SmartPlanner.xcodeproj`.
-4. Выберите схему `SmartPlanner` и iPhone Simulator.
-5. Запустите приложение сочетанием `⌘R`.
+Сборка из терминала:
 
-Сторонние пакеты не используются, поэтому отдельная установка зависимостей
-не требуется.
+```bash
+cd Android
+./gradlew assembleDebug
+```
 
 ## Тесты
 
-В проекте есть unit-тесты доменной логики, ViewModel, репозиториев, сети,
-кеширования и загрузки изображений, а также UI happy-path создания задачи.
-
-Запуск из Xcode: `Product → Test` (`⌘U`).
-
-Запуск из терминала:
+iOS:
 
 ```bash
 xcodebuild test \
-  -project SmartPlanner.xcodeproj \
+  -project iOS/SmartPlanner.xcodeproj \
   -scheme SmartPlanner \
   -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
 ```
 
-При необходимости замените модель симулятора на установленную локально.
+Android:
+
+```bash
+cd Android
+./gradlew test
+```
+
+В обеих реализациях покрыты доменная логика задач, статистика, ViewModel и
+слой данных. Также присутствуют UI-тесты основного сценария создания задачи.
 
 ## Документация
 
